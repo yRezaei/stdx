@@ -3,37 +3,69 @@ REM Build and install script for stdx library (run from root folder)
 
 REM Default values
 set BUILD_TYPE=Debug
-set NUM_JOBS=34
 
 REM Check for custom build type argument
 if not "%~1"=="" (
     set BUILD_TYPE=%1
 )
 
-REM Set the install directory to include the build type
-set INSTALL_DIR=%~dp0bin\%BUILD_TYPE%
+REM Set the install directory to the "bin" folder
+set INSTALL_DIR=%~dp0bin
 
 REM Display build and install configuration
 echo Building with configuration: %BUILD_TYPE%
 echo Installation directory: %INSTALL_DIR%
 
-REM Create and navigate to the build directory
+REM Create or clean the build directory
 set BUILD_DIR=%~dp0build
-if not exist "%BUILD_DIR%" (
-    mkdir "%BUILD_DIR%"
+if exist "%BUILD_DIR%" (
+    echo Cleaning build directory...
+    rmdir /s /q "%BUILD_DIR%"
 )
+mkdir "%BUILD_DIR%"
+
+REM Create or clean the install (bin) directory
+if exist "%INSTALL_DIR%" (
+    echo Cleaning install directory...
+    rmdir /s /q "%INSTALL_DIR%"
+)
+mkdir "%INSTALL_DIR%"
 
 REM Run the CMake configuration
 echo Configuring the project...
-cmake -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DCMAKE_INSTALL_PREFIX=%INSTALL_DIR% -S "%~dp0" -B "%BUILD_DIR%"
+cmake -S . -B build ^
+      -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
+      -DCMAKE_INSTALL_PREFIX="%INSTALL_DIR%"
+
+REM Check if configuration succeeded
+if errorlevel 1 (
+    echo CMake configuration failed.
+    pause
+    exit /b 1
+)
 
 REM Run the build command
 echo Building the project...
-cmake --build "%BUILD_DIR%" --config %BUILD_TYPE% --target ALL_BUILD -j %NUM_JOBS%
+cmake --build build --config %BUILD_TYPE%
+
+REM Check if build succeeded
+if errorlevel 1 (
+    echo Build failed.
+    pause
+    exit /b 1
+)
 
 REM Run the install command
 echo Installing the project...
-cmake --install "%BUILD_DIR%" --config %BUILD_TYPE%
+cmake --install build --config %BUILD_TYPE%
+
+REM Check if installation succeeded
+if errorlevel 1 (
+    echo Installation failed.
+    pause
+    exit /b 1
+)
 
 REM Indicate completion
 echo Build and installation complete.
+pause

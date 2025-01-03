@@ -1,69 +1,80 @@
 from conan import ConanFile
-from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
-from conan.tools.files import copy, rmdir
-import os
+from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps
 
 class StdxConan(ConanFile):
     name = "stdx"
     version = "0.1"
-    license = "MIT"  # Replace with your license
-    author = "Yashar Abbasalizadeh Rezaei"
+    license = "MIT"
+    author = "Yashar A.Rezaei"
     url = "https://github.com/yrezaei/stdx"
-    description = "A modular C++ library"
-    topics = ("c++", "library", "modular")
+    description = "Collection of C++ modules"
+    topics = ("logger", "flag", "utilities")
+
     settings = "os", "compiler", "build_type", "arch"
     options = {
         "shared": [True, False],
         "fPIC": [True, False],
-        "build_flag_module": [True, False],
-        "build_dummy_module": [True, False]
+        # Enable/disable modules
+        "enable_flag": [True, False],
+        "enable_logger": [True, False],
     }
     default_options = {
-        "shared": True,
+        "shared": False,
         "fPIC": True,
-        "build_flag_module": True,
-        "build_dummy_module": True
+        "enable_flag": True,
+        "enable_logger": True,
     }
+
     exports_sources = (
         "CMakeLists.txt",
+        "modules/*",
         "include/*",
-        "src/*",
-        "flag/*",
-        "dummy/*"
+        "conanfile.py"
     )
 
-    def config_options(self):
+    def configure(self):
         if self.settings.os == "Windows":
             del self.options.fPIC
 
     def layout(self):
-        cmake_layout(self)
+        pass  # or use a layout helper if you prefer
+
+    def requirements(self):
+        pass
+
+    def build_requirements(self):
+        pass
 
     def generate(self):
-        deps = CMakeDeps(self)
-        deps.generate()
         tc = CMakeToolchain(self)
-        tc.variables["BUILD_FLAG_MODULE"] = "ON" if self.options.build_flag_module else "OFF"
-        tc.variables["BUILD_DUMMY_MODULE"] = "ON" if self.options.build_dummy_module else "OFF"
+        tc.variables["CMAKE_BUILD_TYPE"] = str(self.settings.build_type)
+
+        # If user says -o stdx:shared=True, then set BUILD_SHARED_LIBS=ON
+        tc.cache_variables["BUILD_SHARED_LIBS"] = "ON" if self.options.shared else "OFF"
+
+        # Pass module enable flags to CMake
+        tc.preprocessor_definitions["STDX_ENABLE_FLAG"] = \
+            "ON" if self.options.enable_flag else "OFF"
+        tc.preprocessor_definitions["STDX_ENABLE_LOGGER"] = \
+            "ON" if self.options.enable_logger else "OFF"
+
         tc.generate()
+
+        cd = CMakeDeps(self)
+        cd.generate()
 
     def build(self):
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
+        cmake.test()  # optionally run tests during build
 
     def package(self):
-        # Copy headers and compiled libraries
-        copy(self, "*.hpp", dst=os.path.join(self.package_folder, "include"), src=os.path.join(self.source_folder, "include"))
-        copy(self, "*.a", dst="lib", src=self.build_folder, keep_path=False)
-        copy(self, "*.lib", dst="lib", src=self.build_folder, keep_path=False)
-        copy(self, "*.so", dst="lib", src=self.build_folder, keep_path=False)
-        copy(self, "*.dll", dst="bin", src=self.build_folder, keep_path=False)
-        copy(self, "*.dylib", dst="lib", src=self.build_folder, keep_path=False)
-
+        cmake = CMake(self)
+        cmake.install()
 
     def package_info(self):
-        self.cpp_info.set_property("cmake_file_name", "stdx")
-        self.cpp_info.set_property("cmake_target_name", "stdx::stdx")
-        self.cpp_info.includedirs = ["include"]  # Specify the include directory
-
+        # If the logger module was enabled, add logger library
+        if self.options.enable_logger:
+            self.cpp_info.libs.append("stdx_logger")
+        # The flag module is header-only; no library needed
