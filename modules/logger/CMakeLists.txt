@@ -36,12 +36,14 @@ install(TARGETS stdx_logger
     RUNTIME DESTINATION bin
 )
 
-if(MSVC)
-    install(FILES $<TARGET_PDB_FILE:stdx_logger> DESTINATION bin OPTIONAL)
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    # On Linux or macOS, debug symbols are usually embedded in the binary.
-    # If separated, you might need to specify debug symbol files explicitly.
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stdx_logger.debug DESTINATION lib OPTIONAL)
+if (BUILD_SHARED_LIBS)
+    if(MSVC)
+        install(FILES $<TARGET_PDB_FILE:stdx_logger> DESTINATION bin OPTIONAL)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        # On Linux or macOS, debug symbols are usually embedded in the binary.
+        # If separated, you might need to specify debug symbol files explicitly.
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stdx_logger.debug DESTINATION lib OPTIONAL)
+    endif()
 endif()
 
 install(

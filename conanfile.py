@@ -10,6 +10,9 @@ class StdxConan(ConanFile):
     description = "Collection of C++ modules"
     topics = ("logger", "flag", "utilities")
 
+    # Only include the recipe in the Conan repository
+    exports = "conanfile.py"
+    
     settings = "os", "compiler", "build_type", "arch"
     options = {
         "shared": [True, False],
@@ -25,25 +28,17 @@ class StdxConan(ConanFile):
         "enable_logger": True,
     }
 
-    exports_sources = (
-        "CMakeLists.txt",
-        "modules/*",
-        "include/*",
-        "conanfile.py"
-    )
-
     def configure(self):
         if self.settings.os == "Windows":
             del self.options.fPIC
 
     def layout(self):
-        pass  # or use a layout helper if you prefer
+        pass  # Layout can be configured if needed
 
-    def requirements(self):
-        pass
-
-    def build_requirements(self):
-        pass
+    def source(self):
+        # Fetch the full source code from your main GitHub repo
+        self.run("git clone https://github.com/yrezaei/stdx.git")
+        self.run("git checkout v0.1")  # Optional: Checkout specific version/tag
 
     def generate(self):
         tc = CMakeToolchain(self)
@@ -67,7 +62,7 @@ class StdxConan(ConanFile):
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
-        cmake.test()  # optionally run tests during build
+        cmake.test()  # Optionally run tests during build
 
     def package(self):
         cmake = CMake(self)
