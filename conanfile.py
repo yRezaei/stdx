@@ -4,7 +4,7 @@ import os, shutil
 
 class StdxConan(ConanFile):
     name = "stdx"
-    version = "0.1"
+    version = "0.1.2"
     license = "MIT"
     author = "Yashar A.Rezaei"
     url = "https://github.com/yrezaei/stdx"
@@ -38,11 +38,11 @@ class StdxConan(ConanFile):
 
     def source(self):
         self.output.info("Downloading source code...")
-        self.run("curl -L -o stdx-v0.1.1.tar.gz https://github.com/yRezaei/stdx/archive/refs/tags/v0.1.1.tar.gz")
-        self.run("tar -xzf stdx-v0.1.1.tar.gz")
+        self.run("curl -L -o stdx-v{}.tar.gz https://github.com/yRezaei/stdx/archive/refs/tags/v{}.tar.gz".format(self.version))
+        self.run("tar -xzf stdx-v{}.tar.gz".format(self.version))
         
         # Use shutil for moving files cross-platform
-        extracted_folder = "stdx-0.1.1"
+        extracted_folder = "stdx-{}".format(self.version)
         for item in os.listdir(extracted_folder):
             s = os.path.join(extracted_folder, item)
             d = os.path.join(self.source_folder, item)
