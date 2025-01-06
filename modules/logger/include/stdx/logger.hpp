@@ -19,8 +19,6 @@
 #endif
 #elif defined(STDX_STATIC)
 #define STDX_LOGGER_API
-#else
-#error "Either STDX_SHARED or STDX_STATIC must be defined."
 #endif
 #elif defined(__GNUC__) || defined(__clang__)
 #if defined(STDX_SHARED)
@@ -31,8 +29,6 @@
 #endif
 #elif defined(STDX_STATIC)
 #define STDX_LOGGER_API
-#else
-#error "Either STDX_SHARED or STDX_STATIC must be defined."
 #endif
 #else
 // Fallback for other platforms (no visibility attributes)

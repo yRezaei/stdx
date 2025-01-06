@@ -34,20 +34,30 @@ if /I NOT "%BUILD_TYPE%"=="Debug" IF NOT "%BUILD_TYPE%"=="Release" (
 
 :: Check if the stdx package exists in the local cache
 echo Checking if stdx package exists in the local cache...
-for /f "tokens=*" %%i in ('conan list stdx/0.1@yrezaei/stable -c 2^>^&1') do (
+set PACKAGE_FOUND=0
+for /f "tokens=*" %%i in ('conan list stdx -c 2^>^&1') do (
     echo %%i | findstr /C:"Recipe 'stdx' not found" >nul
     if %errorlevel%==0 (
-        echo Package stdx/0.1@yrezaei/stable does not exist. Skipping removal.
-        goto CREATE_PACKAGE
+        echo Package stdx does not exist in the local cache.
+        set PACKAGE_FOUND=0
+        goto SKIP_REMOVE
+    )
+    echo %%i | findstr /C:"Found 1 pkg/version recipes matching stdx in local cache" >nul
+    if %errorlevel%==0 (
+        echo Package stdx exists in the local cache.
+        set PACKAGE_FOUND=1
     )
 )
 
+:SKIP_REMOVE
 :: If the package exists, remove it
-echo Package stdx/0.1@yrezaei/stable exists. Removing...
-conan remove stdx -c
-if errorlevel 1 (
-    echo "Error: Failed to remove existing stdx packages."
-    exit /b 1
+if %PACKAGE_FOUND%==1 (
+    echo Removing stdx package from local cache...
+    conan remove stdx -c
+    if errorlevel 1 (
+        echo "Error: Failed to remove existing stdx packages."
+        exit /b 1
+    )
 )
 
 :CREATE_PACKAGE

@@ -56,12 +56,12 @@ if (BUILD_SHARED_LIBS)
     endif()
 endif()
 
-# Install the export configuration
-install(EXPORT stdx_loggerConfig
-    FILE stdx_loggerConfig.cmake
-    NAMESPACE stdx::
-    DESTINATION lib/cmake/stdx_logger
-)
+# # Install the export configuration
+# install(EXPORT stdx_loggerConfig
+#     FILE stdx_loggerConfig.cmake
+#     NAMESPACE stdx::
+#     DESTINATION lib/cmake/stdx_logger
+# )
 
 # Install header files for the logger module
 install(

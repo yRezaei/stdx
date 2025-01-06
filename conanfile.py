@@ -73,9 +73,6 @@ class StdxConan(ConanFile):
         cd = CMakeDeps(self)
         cd.generate()
 
-        # Prevent stdx-config.cmake from being generated unnecessarily
-        cd.configurations = []
-
     def build(self):
         cmake = CMake(self)
         cmake.configure()
