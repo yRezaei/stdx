@@ -1,5 +1,6 @@
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps
+import os, shutil
 
 class StdxConan(ConanFile):
     name = "stdx"
@@ -36,9 +37,22 @@ class StdxConan(ConanFile):
         pass  # Layout can be configured if needed
 
     def source(self):
-        # Fetch the full source code from your main GitHub repo
-        self.run("git clone https://github.com/yrezaei/stdx.git")
-        self.run("git checkout v0.1")  # Optional: Checkout specific version/tag
+        self.output.info("Downloading source code...")
+        self.run("curl -L -o stdx-v0.1.1.tar.gz https://github.com/yRezaei/stdx/archive/refs/tags/v0.1.1.tar.gz")
+        self.run("tar -xzf stdx-v0.1.1.tar.gz")
+        
+        # Use shutil for moving files cross-platform
+        extracted_folder = "stdx-0.1.1"
+        for item in os.listdir(extracted_folder):
+            s = os.path.join(extracted_folder, item)
+            d = os.path.join(self.source_folder, item)
+            if os.path.isdir(s):
+                shutil.move(s, d)
+            else:
+                shutil.move(s, d)
+    
+        # Remove the extracted folder after moving its contents
+        shutil.rmtree(extracted_folder)
 
     def generate(self):
         tc = CMakeToolchain(self)
@@ -55,8 +69,12 @@ class StdxConan(ConanFile):
 
         tc.generate()
 
+        # Generate CMakeDeps for each module
         cd = CMakeDeps(self)
         cd.generate()
+
+        # Prevent stdx-config.cmake from being generated unnecessarily
+        cd.configurations = []
 
     def build(self):
         cmake = CMake(self)
