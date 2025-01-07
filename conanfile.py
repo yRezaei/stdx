@@ -6,7 +6,7 @@ import os, shutil
 
 class StdxConan(ConanFile):
     name = "stdx"
-    version = "0.1.2"
+    version = "0.1.3"
     license = "MIT"
     author = "Yashar A.Rezaei"
     url = "https://github.com/yrezaei/stdx"
