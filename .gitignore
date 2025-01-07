@@ -12,3 +12,5 @@ _deps
 build
 bin
 project_folder_structure.txt
+**/CMakeUserPresets.json
+.vscode
