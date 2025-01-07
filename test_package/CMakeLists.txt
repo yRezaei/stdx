@@ -4,18 +4,18 @@ project(test_package CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Add the package dependencies
-find_package(stdx REQUIRED)
+find_package(GTest REQUIRED)
 
 # Logger test
 if(STDX_ENABLE_LOGGER)
-    add_executable(test_logger src/test_logger.cxx)
-    target_include_directories(test_logger PRIVATE ${stdx_INCLUDE_DIRS})
-    target_link_libraries(test_logger stdx::stdx)
+    find_package(logger REQUIRED)
+    add_executable(test_logger ${CMAKE_SOURCE_DIR}/../tests/test_logger.cxx)
+    target_link_libraries(test_logger PUBLIC stdx::logger gtest::gtest)
 endif()
 
 # Flag test
 if(STDX_ENABLE_FLAG)
-    add_executable(test_flag src/test_flag.cxx)
-    target_include_directories(test_flag PRIVATE ${stdx_INCLUDE_DIRS})
+    find_package(flag REQUIRED)
+    add_executable(test_flag ${CMAKE_SOURCE_DIR}/../tests/test_flag.cxx)
+    target_link_libraries(test_flag PUBLIC stdx::flag gtest::gtest)
 endif()

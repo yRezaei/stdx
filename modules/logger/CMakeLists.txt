@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(stdx_logger CXX)
+project(logger CXX)
 
 # Determine library type (STATIC or SHARED)
 set(LIBRARY_TYPE STATIC) # Default to STATIC
@@ -7,65 +7,69 @@ if (BUILD_SHARED_LIBS)
     set(LIBRARY_TYPE SHARED)
 endif()
 
-# Define the stdx_logger target
-add_library(stdx_logger ${LIBRARY_TYPE}
+# Define the logger target
+add_library(logger ${LIBRARY_TYPE}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/logger.cxx
 )
 
+# Ensure C++17 standard
+target_compile_features(logger PUBLIC cxx_std_17)
+
 # Set compile definitions for shared/static builds
 if (BUILD_SHARED_LIBS)
-    target_compile_definitions(stdx_logger PRIVATE BUILDING_STDX_LOGGER)
-    target_compile_definitions(stdx_logger PUBLIC STDX_SHARED)
+    target_compile_definitions(logger PRIVATE BUILDING_STDX_LOGGER)
+    target_compile_definitions(logger PUBLIC STDX_SHARED)
 else()
-    target_compile_definitions(stdx_logger PUBLIC STDX_STATIC)
+    target_compile_definitions(logger PUBLIC STDX_STATIC)
 endif()
 
-# Ensure C++17 standard
-target_compile_features(stdx_logger PUBLIC cxx_std_17)
-
-# Alias for cleaner target usage
-add_library(stdx::logger ALIAS stdx_logger)
+# Ensure consumers inherit the correct macro
+target_compile_definitions(logger INTERFACE $<TARGET_PROPERTY:logger,COMPILE_DEFINITIONS>)
 
 # Include directories for the logger module
-target_include_directories(stdx_logger PUBLIC
+target_include_directories(logger PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
-# Unit tests for logger
-add_executable(test_logger ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_logger.cxx)
-target_link_libraries(test_logger PRIVATE stdx_logger)
-add_test(NAME test_logger COMMAND test_logger)
+# Optionally install debug symbols for shared libraries
+if (BUILD_SHARED_LIBS)
+    if (MSVC)
+        install(FILES $<TARGET_PDB_FILE:logger> DESTINATION bin OPTIONAL)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/logger.debug DESTINATION lib OPTIONAL)
+    endif()
+endif()
 
 # Installation rules for the library
-install(TARGETS stdx_logger
-    EXPORT stdx_loggerConfig
+install(TARGETS logger
+    EXPORT loggerConfig
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
     INCLUDES DESTINATION include
 )
 
-# Optionally install debug symbols for shared libraries
-if (BUILD_SHARED_LIBS)
-    if (MSVC)
-        install(FILES $<TARGET_PDB_FILE:stdx_logger> DESTINATION bin OPTIONAL)
-    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stdx_logger.debug DESTINATION lib OPTIONAL)
-    endif()
-endif()
-
-# # Install the export configuration
-# install(EXPORT stdx_loggerConfig
-#     FILE stdx_loggerConfig.cmake
-#     NAMESPACE stdx::
-#     DESTINATION lib/cmake/stdx_logger
-# )
+# Install the export configuration
+install(EXPORT loggerConfig
+    FILE loggerConfig.cmake
+    NAMESPACE stdx::
+    DESTINATION cmake
+)
 
 # Install header files for the logger module
 install(
     DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/stdx/"
     DESTINATION "include/stdx"
 )
+
+option(STDX_BUILD_TESTS "Enable building tests for the flag module" OFF)
+if(STDX_BUILD_TESTS)
+    find_package(GTest REQUIRED)
+    # Unit tests for logger
+    add_executable(test_logger ${CMAKE_SOURCE_DIR}/tests/test_logger.cxx)
+    target_link_libraries(test_logger PRIVATE logger gtest::gtest)
+    add_test(NAME test_logger COMMAND test_logger)
+endif()
 

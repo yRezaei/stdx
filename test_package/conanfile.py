@@ -9,12 +9,15 @@ class TestPackageConan(ConanFile):
 
     def requirements(self):
         self.requires(self.tested_reference_str)
+        self.requires("gtest/1.15.0")
         
     def layout(self):
         cmake_layout(self)
+        self.folders.build = "build"
 
     def generate(self):
         tc = CMakeToolchain(self)
+        tc.variables["CMAKE_PREFIX_PATH"] = os.path.join(self.dependencies["stdx"].package_folder, "cmake").replace("\\", "/")
         tc.variables["STDX_ENABLE_FLAG"] = "ON" if self.dependencies["stdx"].options.enable_flag else "OFF"
         tc.variables["STDX_ENABLE_LOGGER"] = "ON" if self.dependencies["stdx"].options.enable_logger else "OFF"
         tc.generate()
