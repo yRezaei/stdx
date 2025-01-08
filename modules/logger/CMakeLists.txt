@@ -68,7 +68,7 @@ option(STDX_BUILD_TESTS "Enable building tests for the flag module" OFF)
 if(STDX_BUILD_TESTS)
     find_package(GTest REQUIRED)
     # Unit tests for logger
-    add_executable(test_logger ${CMAKE_SOURCE_DIR}/tests/test_logger.cxx)
+    add_executable(test_logger ${CMAKE_SOURCE_DIR}/test_package/test_logger.cxx)
     target_link_libraries(test_logger PRIVATE logger gtest::gtest)
     add_test(NAME test_logger COMMAND test_logger)
 endif()
