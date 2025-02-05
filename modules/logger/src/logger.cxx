@@ -81,7 +81,6 @@ namespace stdx
         {
             throw std::runtime_error("Failed to open log file: " + file_path_.string());
         }
-        std::filesystem::create_directories(file_path_.parent_path() / "history");
     }
 
     Logger::~Logger()
@@ -182,6 +181,10 @@ namespace stdx
 
         std::string timestamped_name = file_path_.stem().string() + "-" +
                                        first_timestamp_ + "-" + last_timestamp_ + file_path_.extension().string();
+        if (!std::filesystem::exists(file_path_.parent_path() / "history"))
+        {
+            std::filesystem::create_directories(file_path_.parent_path() / "history");
+        }
         std::filesystem::path rotated_file = file_path_.parent_path() / "history" / timestamped_name;
 
         std::filesystem::rename(file_path_, rotated_file);
