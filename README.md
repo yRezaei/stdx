@@ -91,12 +91,8 @@ Include the desired modules in your `CMakeLists.txt`:
 
 ```cmake
 # Find and link the flag module
-find_package(flag REQUIRED)
-target_link_libraries(YOUR_TARGET PUBLIC stdx::flag)
-
-# Find and link the logger module
-find_package(logger REQUIRED)
-target_link_libraries(YOUR_TARGET PUBLIC stdx::logger)
+find_package(stdx REQUIRED)
+target_link_libraries(YOUR_TARGET PUBLIC stdx::stdx)
 ```
 
 #### **Using Conan**
@@ -115,7 +111,6 @@ Add `stdx` to your `conanfile.txt` or `conanfile.py` as shown earlier. Use the `
 |-------------------------|-----------------------------------------------|-------------|
 | `stdx/*:enable_flag`    | Enable the `flag` module.                     | `True`      |
 | `stdx/*:enable_logger`  | Enable the `logger` module.                   | `True`      |
-| `stdx:shared`           | Build shared libraries instead of static.     | `False`     |
 
 ---
 
