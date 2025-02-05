@@ -63,7 +63,7 @@ if %PACKAGE_FOUND%==1 (
 :CREATE_PACKAGE
 :: Create the package with specified options
 echo Creating and building the stdx package...
-conan create . --name=stdx  --user=yrezaei --channel=stable --build=missing -s compiler.cppstd=17 -s build_type=%BUILD_TYPE% -o stdx/*:shared=%SHARED_FLAG% -o stdx/*:local_dev=True
+conan create . --name=stdx --build=missing -s compiler.cppstd=17 -s build_type=%BUILD_TYPE% -o stdx/*:shared=%SHARED_FLAG% -o stdx/*:local_dev=True
 if errorlevel 1 (
     echo "Error: Failed to create and build the stdx package."
     exit /b 1
