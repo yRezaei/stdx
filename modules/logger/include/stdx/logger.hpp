@@ -43,12 +43,12 @@
 namespace stdx
 {
 
-    enum class Severity
+    enum class Severity : std::uint8_t
     {
-        INFO,
-        DEBUG,
-        WARNING,
-        ERROR
+        INFO,   // Information
+        DEB,    // Debug
+        WARN,   // Warning
+        ERR     // Error
     };
 
     class STDX_LOGGER_API Logger

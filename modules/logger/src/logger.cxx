@@ -215,11 +215,11 @@ namespace stdx
         {
         case Severity::INFO:
             return "INFO";
-        case Severity::DEBUG:
+        case Severity::DEB:
             return "DEBUG";
-        case Severity::WARNING:
+        case Severity::WARN:
             return "WARNING";
-        case Severity::ERROR:
+        case Severity::ERR:
             return "ERROR";
         default:
             return "UNKNOWN";
