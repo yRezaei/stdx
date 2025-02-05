@@ -7,21 +7,23 @@ if (BUILD_SHARED_LIBS)
     set(LIBRARY_TYPE SHARED)
 endif()
 
-# Define the logger target
-add_library(logger ${LIBRARY_TYPE}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/logger.cxx
-)
+option(BUILD_SHARED_LIBS "Build libraries as shared" ON)
+
+
+
+if(BUILD_SHARED_LIBS)
+    add_library(logger SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/logger.cxx)
+    # This define is used *internally* to mean "export symbols"
+    target_compile_definitions(logger PRIVATE STDX_BUILD_SHARED STDX_INCLUDE_EXPORT)
+    # This define is used by *consumers* to mean "import symbols"
+    target_compile_definitions(logger INTERFACE STDX_USE_SHARED)
+else()
+    add_library(logger STATIC ${CMAKE_CURRENT_SOURCE_DIR}/src/logger.cxx)
+    target_compile_definitions(logger PRIVATE STDX_INCLUDE_EXPORT)
+endif()
 
 # Ensure C++17 standard
 target_compile_features(logger PUBLIC cxx_std_17)
-
-# Set compile definitions for shared/static builds
-if (BUILD_SHARED_LIBS)
-    target_compile_definitions(logger PRIVATE BUILDING_STDX_LOGGER)
-    target_compile_definitions(logger PUBLIC STDX_SHARED)
-else()
-    target_compile_definitions(logger PUBLIC STDX_STATIC)
-endif()
 
 # Ensure consumers inherit the correct macro
 target_compile_definitions(logger INTERFACE $<TARGET_PROPERTY:logger,COMPILE_DEFINITIONS>)

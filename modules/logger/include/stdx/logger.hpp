@@ -12,32 +12,10 @@
 #include <functional>
 #include <vector>
 
-#ifdef _WIN32
-#if defined(STDX_SHARED)
-#ifdef BUILDING_STDX_LOGGER
-#define STDX_LOGGER_API __declspec(dllexport)
+#if defined(STDX_INCLUDE_EXPORT)
+#include "stdx/stdx_export.hpp"
 #else
-#define STDX_LOGGER_API __declspec(dllimport)
-#endif
-#elif defined(STDX_STATIC)
-#define STDX_LOGGER_API
-#else
-#error "Either STDX_SHARED or STDX_STATIC must be defined."
-#endif
-#elif defined(__GNUC__) || defined(__clang__)
-#if defined(STDX_SHARED)
-#ifdef BUILDING_STDX_LOGGER
-#define STDX_LOGGER_API __attribute__((visibility("default")))
-#else
-#define STDX_LOGGER_API
-#endif
-#elif defined(STDX_STATIC)
-#define STDX_LOGGER_API
-#else
-#error "Either STDX_SHARED or STDX_STATIC must be defined."
-#endif
-#else
-#define STDX_LOGGER_API
+#  define STDX_API
 #endif
 
 namespace stdx
@@ -51,7 +29,7 @@ namespace stdx
         ERR     // Error
     };
 
-    class STDX_LOGGER_API Logger
+    class STDX_API Logger
     {
         struct LogMessage
         {
