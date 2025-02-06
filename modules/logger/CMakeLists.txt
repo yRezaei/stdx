@@ -1,24 +1,22 @@
 cmake_minimum_required(VERSION 3.15)
 project(logger CXX)
 
-# Determine library type (STATIC or SHARED)
-set(LIBRARY_TYPE STATIC) # Default to STATIC
-if (BUILD_SHARED_LIBS)
-    set(LIBRARY_TYPE SHARED)
-endif()
-
 option(BUILD_SHARED_LIBS "Build libraries as shared" ON)
 
-
+set(LOGGER_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/logger.cxx"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/log_manager.cxx"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/impl/logger_impl.cxx"
+)
 
 if(BUILD_SHARED_LIBS)
-    add_library(logger SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/logger.cxx)
+    add_library(logger SHARED ${LOGGER_SOURCES})
     # This define is used *internally* to mean "export symbols"
     target_compile_definitions(logger PRIVATE STDX_BUILD_SHARED STDX_INCLUDE_EXPORT)
     # This define is used by *consumers* to mean "import symbols"
     target_compile_definitions(logger INTERFACE STDX_USE_SHARED)
 else()
-    add_library(logger STATIC ${CMAKE_CURRENT_SOURCE_DIR}/src/logger.cxx)
+    add_library(logger STATIC ${LOGGER_SOURCES})
     target_compile_definitions(logger PRIVATE STDX_INCLUDE_EXPORT)
 endif()
 

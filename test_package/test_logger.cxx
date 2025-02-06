@@ -1,9 +1,10 @@
 #include <gtest/gtest.h>
-#include <stdx/logger.hpp>
 #include <thread>
 #include <fstream>
 #include <filesystem>
 #include <chrono>
+#include <stdx/logger/log_manager.hpp> // <-- Includes LogManager & Logger
+#include <stdx/logger/logger.hpp>
 
 using namespace stdx;
 
@@ -39,16 +40,21 @@ protected:
         const ::testing::TestInfo *test_info = ::testing::UnitTest::GetInstance()->current_test_info();
         log_file_name_ = "logs/" + std::string(test_info->name()) + ".log";
 
-        // Initialize the logger with the generated log file name
-        Logger::initialize("test_logger_async", log_file_name_, 100 * 1024 /* 1MB */, 3 /* max backups */);
+        // Initialize the LogManager with the generated log file name
+        // (here we use 100 * 1024 ≈ 100KB as the max file size, 3 backups)
+        LogManager::initialize(log_file_name_, 100 * 1024, 3);
     }
 
     void TearDown() override
     {
-        Logger::shutdown(""); // Shut down all loggers
+        // Shut down the logging system
+        // (Make sure you have implemented LogManager::shutdown())
+        LogManager::shutdown();
+
+        // Clean up all logs after the test
         try
         {
-            std::filesystem::remove_all("logs"); // Clean up all logs after the test
+            std::filesystem::remove_all("logs");
         }
         catch (const std::exception &ex)
         {
@@ -60,11 +66,12 @@ protected:
 // Test logging basic messages
 TEST_F(LoggerTests, LogBasicMessages)
 {
-    Logger &logger = Logger::get_instance("test_logger_async");
+    // Create a Logger for "BasicTest"
+    auto logger = LogManager::create_logger("BasicTest");
 
     // Log messages
-    logger.log(Severity::INFO, "BasicTest", "Logging INFO message.");
-    logger.log(Severity::ERR, "BasicTest", "Logging ERROR message.");
+    logger.log(SEVERITY::INFO, "Logging INFO message.");
+    logger.log(SEVERITY::ERR, "Logging ERROR message.");
 
     // Flush logs to ensure all messages are written
     logger.flush();
@@ -77,22 +84,23 @@ TEST_F(LoggerTests, LogBasicMessages)
 // Test logging under high load
 TEST_F(LoggerTests, HighLoadLogging)
 {
-    Logger &logger = Logger::get_instance("test_logger_async");
+    // Create a Logger for "HighLoadTest"
+    auto logger = LogManager::create_logger("HighLoadTest");
 
     // Log a large number of messages
     for (int i = 0; i < 1000; ++i)
     {
-        logger.log(Severity::DEB, "HighLoadTest", "Logging message #" + std::to_string(i));
+        logger.log(SEVERITY::DEB, "Logging message #" + std::to_string(i));
     }
 
-    // Flush logs to ensure all messages are written and rotations are complete
+    // Flush logs to ensure all messages are written
     logger.flush();
 
     // Check for log messages in the active log file first
     bool found_message_0 = false;
     bool found_message_999 = false;
 
-    std::filesystem::path active_log_file = "logs/HighLoadLogging.log";
+    std::filesystem::path active_log_file = log_file_name_; // e.g. "logs/HighLoadLogging.log"
     if (std::filesystem::exists(active_log_file))
     {
         std::ifstream file(active_log_file);
@@ -149,15 +157,15 @@ TEST_F(LoggerTests, HighLoadLogging)
 // Test log file rotation
 TEST_F(LoggerTests, LogFileRotation)
 {
-    Logger &logger = Logger::get_instance("test_logger_async");
+    auto logger = LogManager::create_logger("RotationTest");
 
     // Log enough messages to trigger file rotation
     for (int i = 0; i < 3000; ++i)
     {
-        logger.log(Severity::INFO, "RotationTest", "Message #" + std::to_string(i));
+        logger.log(SEVERITY::INFO, "Message #" + std::to_string(i));
     }
 
-    // Wait for the worker thread to process messages and perform rotations
+    // Wait briefly for the worker thread to process messages
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
     // Flush logs to ensure rotation is complete
@@ -185,15 +193,15 @@ TEST_F(LoggerTests, LogFileRotation)
 // Test buffered writing with time threshold
 TEST_F(LoggerTests, BufferedWritingTimeThreshold)
 {
-    Logger &logger = Logger::get_instance("test_logger_async");
+    auto logger = LogManager::create_logger("BufferTest");
 
     // Log fewer than the flush threshold
     for (int i = 0; i < 5; ++i)
     {
-        logger.log(Severity::DEB, "BufferTest", "Buffered message #" + std::to_string(i));
+        logger.log(SEVERITY::DEB, "Buffered message #" + std::to_string(i));
     }
 
-    // Wait for the time threshold to elapse
+    // Wait for the time threshold to elapse (assuming 500ms or so in your impl)
     std::this_thread::sleep_for(std::chrono::milliseconds(600));
 
     // Flush logs to ensure all buffered messages are written
@@ -209,15 +217,15 @@ TEST_F(LoggerTests, BufferedWritingTimeThreshold)
 // Test buffered writing with message threshold
 TEST_F(LoggerTests, BufferedWritingMessageThreshold)
 {
-    Logger &logger = Logger::get_instance("test_logger_async");
+    auto logger = LogManager::create_logger("BufferTest");
 
-    // Log exactly the flush threshold number of messages
+    // Log exactly the flush threshold number of messages (assuming flush_threshold = 10)
     for (int i = 0; i < 10; ++i)
     {
-        logger.log(Severity::DEB, "BufferTest", "Buffered message #" + std::to_string(i));
+        logger.log(SEVERITY::DEB, "Buffered message #" + std::to_string(i));
     }
 
-    // Wait for the worker thread to process
+    // Wait briefly for the worker thread to process
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     // Validate that all messages were written
