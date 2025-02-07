@@ -42,7 +42,7 @@ protected:
 
         // Initialize the LogManager with the generated log file name
         // (here we use 100 * 1024 ≈ 100KB as the max file size, 3 backups)
-        LogManager::initialize(log_file_name_, 100 * 1024, 3);
+        LogManager::initialize(log_file_name_, 10 * 1024, 3);
     }
 
     void TearDown() override

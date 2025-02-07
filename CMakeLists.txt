@@ -64,6 +64,8 @@ endif()
 # ------------------------------------------------------------------------------
 # Install the shared "utils.hpp" if you want a system-wide "make install"
 # ------------------------------------------------------------------------------
-install(FILES include/stdx/utils.hpp
+install(FILES 
+    include/stdx/utils.hpp 
+    include/stdx/mpmc_ring_buffer.hpp
     DESTINATION include/stdx
 )

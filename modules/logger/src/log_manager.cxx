@@ -13,6 +13,8 @@ std::mutex LogManager::init_mutex_;
 void LogManager::initialize(const std::filesystem::path& file_path,
                             std::size_t max_file_size,
                             std::size_t max_backup_files,
+                            std::size_t batch_size,
+                            std::chrono::seconds flush_interval,
                             RotationStrategy custom_strategy)
 {
     std::lock_guard<std::mutex> lock(init_mutex_);
@@ -24,6 +26,8 @@ void LogManager::initialize(const std::filesystem::path& file_path,
     impl_ = std::make_unique<detail::LoggerImpl>(file_path,
                                          max_file_size,
                                          max_backup_files,
+                                         batch_size,
+                                         flush_interval,
                                          std::move(custom_strategy));
     file_path_ = file_path;
     initialized_ = true;

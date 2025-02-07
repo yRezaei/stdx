@@ -26,6 +26,8 @@ namespace stdx
         static void initialize(const std::filesystem::path &file_path,
                                size_t max_file_size = 10 * 1024 * 1024, // 10 MB
                                size_t max_backup_files = 5,
+                               std::size_t batch_size = 10,
+                               std::chrono::seconds flush_interval = std::chrono::seconds(5),
                                RotationStrategy custom_strategy = nullptr);
 
         static bool is_initialized();

@@ -27,6 +27,8 @@ namespace detail
         LoggerImpl(const std::filesystem::path& file_path,
                    std::size_t max_file_size,
                    std::size_t max_backup_files,
+                   std::size_t batch_size,
+                   std::chrono::seconds flush_interval,
                    RotationStrategy custom_strategy);
 
         ~LoggerImpl();
@@ -67,6 +69,8 @@ namespace detail
         std::mutex rotation_mutex_;
         std::size_t max_file_size_;
         std::size_t max_backup_files_;
+        std::size_t batch_size_;
+        std::chrono::seconds flush_interval_;
         RotationStrategy custom_rotation_strategy_;
 
         std::atomic<bool> is_running_;
