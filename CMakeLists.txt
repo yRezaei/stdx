@@ -65,7 +65,13 @@ endif()
 # Install the shared "utils.hpp" if you want a system-wide "make install"
 # ------------------------------------------------------------------------------
 install(FILES 
-    include/stdx/utils.hpp 
-    include/stdx/mpmc_ring_buffer.hpp
+    include/stdx/utils.hpp
     DESTINATION include/stdx
+)
+
+install(FILES 
+    include/stdx/concurrency/locked_queue.hpp
+    include/stdx/concurrency/ring_buffer.hpp
+    include/stdx/concurrency/thread_pool.hpp
+    DESTINATION include/stdx/concurrency
 )

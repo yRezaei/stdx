@@ -18,7 +18,6 @@ namespace stdx
         class LoggerImpl;
     }
 
-    // Private class (not part of the public API):
     // A single "manager" that owns one LoggerImpl instance and mediates its lifecycle.
     class STDX_API LogManager
     {

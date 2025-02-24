@@ -4,32 +4,32 @@
 #include <atomic>
 #include <chrono>
 
-#include "stdx/mpmc_ring_buffer.hpp"
+#include "stdx/concurrency/ring_buffer.hpp"
 
 namespace stdx {
 
 static constexpr std::size_t BUFFER_SIZE = 1024; // must be power of two
-using IntRingBuffer = MpmcRingBuffer<int, BUFFER_SIZE>;
+using IntRingBuffer = stdx::concurrency::RingBuffer<int, BUFFER_SIZE>;
 
 //------------------------------------------------------------------------------
 // Basic Single-Threaded Test
 //------------------------------------------------------------------------------
-TEST(MpmcRingBufferTest, SingleThreadedPushPop)
+TEST(BoundedQueueTest, SingleThreadedPushPop)
 {
     IntRingBuffer buffer;
-    EXPECT_TRUE(buffer.is_empty());
-    EXPECT_FALSE(buffer.is_full());
+    EXPECT_TRUE(buffer.empty());
+    EXPECT_FALSE(buffer.full());
 
     // Push an item
     EXPECT_TRUE(buffer.push(42));
-    EXPECT_FALSE(buffer.is_empty());
+    EXPECT_FALSE(buffer.empty());
 
     // Pop the item
     int value = 0;
     EXPECT_TRUE(buffer.pop(value));
     EXPECT_EQ(value, 42);
-    EXPECT_TRUE(buffer.is_empty());
-    EXPECT_FALSE(buffer.is_full());
+    EXPECT_TRUE(buffer.empty());
+    EXPECT_FALSE(buffer.full());
 
     // Pop again should fail (empty)
     EXPECT_FALSE(buffer.pop(value));
@@ -38,16 +38,16 @@ TEST(MpmcRingBufferTest, SingleThreadedPushPop)
 //------------------------------------------------------------------------------
 // Fill / Overfill Test
 //------------------------------------------------------------------------------
-TEST(MpmcRingBufferTest, FillAndOverfill)
+TEST(BoundedQueueTest, FillAndOverfill)
 {
-    MpmcRingBuffer<int, 8> small_buffer; // capacity=8 (power of two)
+    stdx::concurrency::RingBuffer<int, 8> small_buffer; // capacity=8 (power of two)
     // Fill the buffer
     for (int i = 0; i < 8; ++i)
     {
         EXPECT_TRUE(small_buffer.push(i)) << "Push " << i << " failed unexpectedly.";
     }
     // Now it should be full
-    EXPECT_TRUE(small_buffer.is_full());
+    EXPECT_TRUE(small_buffer.full());
 
     // Overfill attempt
     EXPECT_FALSE(small_buffer.push(99)) << "Expected push to fail when buffer is full.";
@@ -59,8 +59,8 @@ TEST(MpmcRingBufferTest, FillAndOverfill)
         EXPECT_TRUE(small_buffer.pop(val)) << "Pop " << i << " failed unexpectedly.";
         EXPECT_EQ(val, i) << "Popped unexpected value.";
     }
-    EXPECT_FALSE(small_buffer.is_full());
-    EXPECT_FALSE(small_buffer.is_empty());
+    EXPECT_FALSE(small_buffer.full());
+    EXPECT_FALSE(small_buffer.empty());
 
     // Now push 4 more
     for (int i = 8; i < 12; ++i)
@@ -68,13 +68,13 @@ TEST(MpmcRingBufferTest, FillAndOverfill)
         EXPECT_TRUE(small_buffer.push(i)) << "Push " << i << " failed unexpectedly.";
     }
     // Should be full again
-    EXPECT_TRUE(small_buffer.is_full());
+    EXPECT_TRUE(small_buffer.full());
 }
 
 //------------------------------------------------------------------------------
 // Single Producer, Single Consumer
 //------------------------------------------------------------------------------
-TEST(MpmcRingBufferTest, SingleProducerSingleConsumer)
+TEST(BoundedQueueTest, SingleProducerSingleConsumer)
 {
     IntRingBuffer buffer;
     const int total_items = 1000;
@@ -98,7 +98,7 @@ TEST(MpmcRingBufferTest, SingleProducerSingleConsumer)
     int popped_count = 0;
     std::thread consumer([&] {
         int val;
-        while (!producer_done.load() || !buffer.is_empty())
+        while (!producer_done.load() || !buffer.empty())
         {
             if (buffer.pop(val))
             {
@@ -122,7 +122,7 @@ TEST(MpmcRingBufferTest, SingleProducerSingleConsumer)
 //------------------------------------------------------------------------------
 // Multiple Producers, Single Consumer
 //------------------------------------------------------------------------------
-TEST(MpmcRingBufferTest, MultiProducerSingleConsumer)
+TEST(BoundedQueueTest, MultiProducerSingleConsumer)
 {
     IntRingBuffer buffer;
     const int total_items_per_thread = 500;
@@ -183,9 +183,9 @@ TEST(MpmcRingBufferTest, MultiProducerSingleConsumer)
 //------------------------------------------------------------------------------
 // Multiple Producers, Multiple Consumers
 //------------------------------------------------------------------------------
-TEST(MpmcRingBufferTest, MultiProducerMultiConsumer)
+TEST(BoundedQueueTest, MultiProducerMultiConsumer)
 {
-    MpmcRingBuffer<int, 512> buffer;
+    stdx::concurrency::RingBuffer<int, 512> buffer;
     const int total_items_per_producer = 300;
     const int num_producers = 3;
     const int num_consumers = 2;
@@ -230,7 +230,7 @@ TEST(MpmcRingBufferTest, MultiProducerMultiConsumer)
                 else
                 {
                     // Check if we are done
-                    if (produced_count.load() >= total_items && buffer.is_empty())
+                    if (produced_count.load() >= total_items && buffer.empty())
                     {
                         break;
                     }
