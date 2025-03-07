@@ -1,13 +1,12 @@
 
 list(APPEND STDX_HEADERS
-    "${CMAKE_SOURCE_DIR}/include/stdx/utils.hpp"
-    "${CMAKE_SOURCE_DIR}/include/stdx/flag.hpp"
+    "${CMAKE_SOURCE_DIR}/include/stdx/concurrency/ring_buffer.hpp"
 )
 
 install(
-    FILES "${CMAKE_SOURCE_DIR}/include/stdx/utils.hpp"
-    FILES "${CMAKE_SOURCE_DIR}/include/stdx/flag.hpp"
-    DESTINATION "include/stdx"
+    FILES 
+        "${CMAKE_SOURCE_DIR}/include/stdx/concurrency/ring_buffer.hpp"
+    DESTINATION "include/stdx/concurrency"
 )
 
 # option(STDX_BUILD_TESTS "Enable building tests for the flag module" OFF)

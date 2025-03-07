@@ -1,13 +1,12 @@
 
 list(APPEND STDX_HEADERS
-    "${CMAKE_SOURCE_DIR}/include/stdx/utils.hpp"
-    "${CMAKE_SOURCE_DIR}/include/stdx/flag.hpp"
+    "${CMAKE_SOURCE_DIR}/include/stdx/threading/thread_pool.hpp"
 )
 
 install(
-    FILES "${CMAKE_SOURCE_DIR}/include/stdx/utils.hpp"
-    FILES "${CMAKE_SOURCE_DIR}/include/stdx/flag.hpp"
-    DESTINATION "include/stdx"
+    FILES
+        "${CMAKE_SOURCE_DIR}/include/stdx/threading/thread_pool.hpp"
+    DESTINATION "include/stdx/threading"
 )
 
 # option(STDX_BUILD_TESTS "Enable building tests for the flag module" OFF)

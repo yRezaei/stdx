@@ -18,7 +18,6 @@ class TestPackageConan(ConanFile):
     def generate(self):
         stdx_options = self.dependencies["stdx"].options
         tc = CMakeToolchain(self)
-        # tc.variables["CMAKE_PREFIX_PATH"] = os.path.join(self.dependencies["stdx"].package_folder, "cmake").replace("\\", "/")
         tc.variables["STDX_ENABLE_FLAG"] = "ON" if stdx_options.enable_flag else "OFF"
         tc.variables["STDX_ENABLE_LOGGER"] = "ON" if stdx_options.enable_logger else "OFF"
         tc.generate()

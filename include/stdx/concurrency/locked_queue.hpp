@@ -1,5 +1,4 @@
-#ifndef DA0C9935_47EE_475F_8AFD_D055C428565A
-#define DA0C9935_47EE_475F_8AFD_D055C428565A
+#pragma once
 
 #include <queue>
 #include <mutex>
@@ -87,5 +86,3 @@ namespace stdx
 
     } // namespace concurrency
 } // namespace stdx
-
-#endif /* DA0C9935_47EE_475F_8AFD_D055C428565A */

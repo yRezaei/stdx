@@ -2,10 +2,10 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
-#include "stdx/concurrency/thread_pool.hpp"
+#include "stdx/threading/thread_pool.hpp"
 #include "stdx/concurrency/ring_buffer.hpp"
 
-using namespace stdx;
+using namespace stdx::threading;
 using namespace stdx::concurrency;
 
 // Test fixture for ThreadPool tests
@@ -26,11 +26,26 @@ protected:
             pool_callable_16_.reset();
             buffer_callable_16_.reset();
         }
+
+        if (pool_callable_256_)
+        {
+            pool_callable_256_->stop();
+            pool_callable_256_.reset();
+            buffer_callable_256_.reset();
+        }
+
         if (pool_16_)
         {
             pool_16_->stop();
             pool_16_.reset();
             buffer_int_16_.reset();
+        }
+        
+        if (pool_256_)
+        {
+            pool_256_->stop();
+            pool_256_.reset();
+            buffer_int_256_.reset();
         }
     }
 
@@ -158,7 +173,7 @@ TEST_F(ThreadPoolTest, TaskScalingUp)
     SetupTaskPool256(1 /* reserved */, 1 /* min */, 10 /* max */, 10 /* monitor interval */);
     pool_256_->start();
 
-    for (int i = 0; i < 350; ++i)
+    for (int i = 0; i < 450; ++i)
     {
         while (!buffer_int_256_->push(1)) {
             // sleep or yield

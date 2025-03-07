@@ -1,5 +1,4 @@
-#ifndef STDX_LOGGER_HPP
-#define STDX_LOGGER_HPP
+#pragma once
 
 #include <string>
 #include <filesystem>
@@ -50,5 +49,3 @@ namespace stdx
     };
 
 } // namespace stdx
-
-#endif // STDX_LOGGER_HPP

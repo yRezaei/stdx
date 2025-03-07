@@ -1,12 +1,12 @@
 from conan import ConanFile
-from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps
+from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
 from conan.tools.files import copy
 from conan.errors import ConanException
 import os, shutil
 
 class StdxConan(ConanFile):
     name = "stdx"
-    version = "0.1.5"
+    version = "0.1.6"
     license = "MIT"
     author = "Yashar A.Rezaei"
     url = "https://github.com/yrezaei/stdx"
@@ -37,7 +37,7 @@ class StdxConan(ConanFile):
         self.dev_mode = self.options.local_dev
 
     def layout(self):
-        pass  # Layout can be configured if needed
+        pass
 
     def source(self):
         # Check the local_dev option
@@ -93,4 +93,4 @@ class StdxConan(ConanFile):
 
     def package_info(self):
         if self.options.enable_logger:
-            self.cpp_info.libs.append("logger")
+            self.cpp_info.libs = ["stdx"]

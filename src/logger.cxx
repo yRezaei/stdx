@@ -1,6 +1,4 @@
 #include "stdx/logger/logger.hpp"
-
-// We include our private headers:
 #include "stdx/logger/log_manager.hpp"
 #include "stdx/logger/impl/logger_impl.hpp"
 

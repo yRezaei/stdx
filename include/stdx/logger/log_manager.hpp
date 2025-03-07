@@ -1,5 +1,4 @@
-#ifndef STDX_IMPL_LOG_MANAGER_HPP
-#define STDX_IMPL_LOG_MANAGER_HPP
+#pragma once
 
 #include <filesystem>
 #include <memory>
@@ -57,5 +56,3 @@ namespace stdx
     };
 
 } // namespace stdx
-
-#endif // STDX_IMPL_LOG_MANAGER_HPP
