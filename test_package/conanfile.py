@@ -30,10 +30,14 @@ class TestPackageConan(ConanFile):
     def test(self):
         if can_run(self):
             stdx_options = self.dependencies["stdx"].options
-            self.run(os.path.join(self.cpp.build.bindir, "test_ring_buffer"), env="conanrun")
-            self.run(os.path.join(self.cpp.build.bindir, "test_thread_pool"), env="conanrun")
             if stdx_options.enable_flag:
                 self.run(os.path.join(self.cpp.build.bindir, "test_flag"), env="conanrun")
+            self.run(os.path.join(self.cpp.build.bindir, "test_function_ref"), env="conanrun")
+            self.run(os.path.join(self.cpp.build.bindir, "test_light_callable"), env="conanrun")
+            self.run(os.path.join(self.cpp.build.bindir, "test_singleton"), env="conanrun")
+            self.run(os.path.join(self.cpp.build.bindir, "test_ring_buffer"), env="conanrun")
+            self.run(os.path.join(self.cpp.build.bindir, "test_thread_pool"), env="conanrun")
+            self.run(os.path.join(self.cpp.build.bindir, "test_timer"), env="conanrun")
             if stdx_options.enable_logger:
                 self.run(os.path.join(self.cpp.build.bindir, "test_logger"), env="conanrun")
             

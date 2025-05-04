@@ -1,392 +1,555 @@
 #include <gtest/gtest.h>
-#include <atomic>
 #include <chrono>
-#include <functional>
+#include <thread>
+#include <atomic>
+#include <vector>
+#include <future>
+#include <random>
 #include "stdx/threading/thread_pool.hpp"
-#include "stdx/concurrency/ring_buffer.hpp"
+
+// If you want to keep your old "DefaultTaskPriority" enum in the test:
+enum class DefaultTaskPriority : unsigned
+{
+    HIGH = 0,
+    MEDIUM = 1,
+    LOW = 2,
+    NUM_PRIORITIES = 3
+};
+
+// A helper to convert that old enum to an integer index:
+static std::size_t to_index(DefaultTaskPriority pri)
+{
+    // e.g., HIGH=0, MEDIUM=1, LOW=2
+    return static_cast<std::size_t>(pri);
+}
 
 using namespace stdx::threading;
-using namespace stdx::concurrency;
+using namespace std::chrono_literals;
 
-// Test fixture for ThreadPool tests
+/**
+ * @brief Test fixture. Each test can create a new ThreadPool with a chosen
+ *        number of threads, capacity, and # of priorities.
+ */
 class ThreadPoolTest : public ::testing::Test
 {
 protected:
     void SetUp() override
     {
-        counter_.store(0, std::memory_order_relaxed);
+        // Usually empty. We'll create a new thread pool inside each test if needed.
     }
 
     void TearDown() override
     {
-        // Ensure both pools are stopped and reset after each test
-        if (pool_callable_16_)
-        {
-            pool_callable_16_->stop();
-            pool_callable_16_.reset();
-            buffer_callable_16_.reset();
-        }
-
-        if (pool_callable_256_)
-        {
-            pool_callable_256_->stop();
-            pool_callable_256_.reset();
-            buffer_callable_256_.reset();
-        }
-
-        if (pool_16_)
-        {
-            pool_16_->stop();
-            pool_16_.reset();
-            buffer_int_16_.reset();
-        }
-
-        if (pool_256_)
-        {
-            pool_256_->stop();
-            pool_256_.reset();
-            buffer_int_256_.reset();
-        }
+        // Possibly call ThreadPool::destroy() if your design expects that.
+        // But each test here calls it at the end manually.
     }
 
-    // Helper to create a ThreadPool with a callable buffer entry
-    void SetupCallablePool16(std::size_t reserved_threads = 2, std::size_t min_threads = 1,
-                             std::size_t max_threads = 4, std::size_t monitor_interval_ms = 50)
+    // Helper function to simulate a small "sleep" returning a value
+    static int sleepTask(int duration, int return_val)
     {
-        buffer_callable_16_ = std::make_unique<RingBuffer<std::function<void()>, 16>>();
-        pool_callable_16_ = std::make_unique<ThreadPool<RingBuffer<std::function<void()>, 16>, std::function<void()>>>(
-            *buffer_callable_16_, reserved_threads, min_threads, 1.5 /* spawn_ratio */, 0.5 /* shrink_ratio */,
-            max_threads, monitor_interval_ms);
+        std::this_thread::sleep_for(std::chrono::milliseconds(duration));
+        return return_val;
     }
-
-    // Helper to create a ThreadPool with a callable buffer entry
-    void SetupCallablePool256(std::size_t reserved_threads = 2, std::size_t min_threads = 1,
-                              std::size_t max_threads = 4, std::size_t monitor_interval_ms = 50)
-    {
-        buffer_callable_256_ = std::make_unique<RingBuffer<std::function<void()>, 256>>();
-        pool_callable_256_ = std::make_unique<ThreadPool<RingBuffer<std::function<void()>, 256>, std::function<void()>>>(
-            *buffer_callable_256_, reserved_threads, min_threads, 1.5 /* spawn_ratio */, 0.5 /* shrink_ratio */,
-            max_threads, monitor_interval_ms);
-    }
-
-    // Helper to create a ThreadPool with an external task
-    void SetupTaskPool(std::size_t reserved_threads = 2, std::size_t min_threads = 1,
-                       std::size_t max_threads = 4, std::size_t monitor_interval_ms = 50)
-    {
-        buffer_int_16_ = std::make_unique<RingBuffer<int, 16>>();
-        pool_16_ = std::make_unique<ThreadPool<RingBuffer<int, 16>, int>>(
-            *buffer_int_16_, [this](int &item)
-            { counter_.fetch_add(item, std::memory_order_relaxed); },
-            reserved_threads, min_threads, 1.5 /* spawn_ratio */, 0.5 /* shrink_ratio */,
-            max_threads, monitor_interval_ms);
-    }
-
-    // Helper to create a ThreadPool with an external task
-    void SetupTaskPool256(std::size_t reserved_threads = 2, std::size_t min_threads = 1,
-                          std::size_t max_threads = 10, std::size_t monitor_interval_ms = 10)
-    {
-        buffer_int_256_ = std::make_unique<RingBuffer<int, 256>>();
-        pool_256_ = std::make_unique<ThreadPool<RingBuffer<int, 256>, int>>(
-            *buffer_int_256_, [this](int &item)
-            { std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                counter_.fetch_add(item, std::memory_order_relaxed); },
-            reserved_threads, min_threads, 1.5 /* spawn_ratio */, 0.5 /* shrink_ratio */,
-            max_threads, monitor_interval_ms, 100, 1);
-    }
-
-    std::atomic<int> counter_{0};
-    std::unique_ptr<RingBuffer<std::function<void()>, 16>> buffer_callable_16_;
-    std::unique_ptr<RingBuffer<int, 16>> buffer_int_16_;
-    std::unique_ptr<RingBuffer<std::function<void()>, 256>> buffer_callable_256_;
-    std::unique_ptr<RingBuffer<int, 256>> buffer_int_256_;
-    std::unique_ptr<ThreadPool<RingBuffer<std::function<void()>, 16>, std::function<void()>>> pool_callable_16_;
-    std::unique_ptr<ThreadPool<RingBuffer<int, 16>, int>> pool_16_;
-    std::unique_ptr<ThreadPool<RingBuffer<std::function<void()>, 256>, std::function<void()>>> pool_callable_256_;
-    std::unique_ptr<ThreadPool<RingBuffer<int, 256>, int>> pool_256_;
 };
 
-// Test cases using callable pool
-TEST_F(ThreadPoolTest, CallableBasicStartStop)
+//-----------------------------------------------------------
+// 1) Basic functionality tests
+//-----------------------------------------------------------
+TEST_F(ThreadPoolTest, ConstructorTest)
 {
-    SetupCallablePool16();
-    pool_callable_16_->start();
-
-    for (int i = 0; i < 5; ++i)
+    // (A) Default: 0 threads => we expect the pool to have 0 worker threads
     {
-        buffer_callable_16_->push([this]()
-                                  { counter_.fetch_add(1, std::memory_order_relaxed); });
+        // create( numThreads=0, bufferCapacity=1024, nr_of_priorities=3 )
+        auto &pool = ThreadPool::create(0, 1024, 3);
+        EXPECT_EQ(pool.get_thread_count(), 0);
+
+        // Optionally destroy
+        ThreadPool::destroy();
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    pool_callable_16_->stop();
+    // (B) Specific thread count (4)
+    {
+        auto &pool = ThreadPool::create(4, 1024, 3);
+        pool.start();
+        EXPECT_EQ(pool.get_thread_count(), 4);
+        pool.stop();
+        ThreadPool::destroy();
+    }
 
-    EXPECT_EQ(counter_.load(), 5);
-    EXPECT_EQ(pool_callable_16_->get_total_threads(), 0);
+    // (C) Zero => defaults to 1 thread
+    {
+        auto &pool = ThreadPool::create(0, 1024, 3);
+        pool.start();
+        EXPECT_EQ(pool.get_thread_count(), 1);
+        pool.stop();
+        ThreadPool::destroy();
+    }
 }
 
-TEST_F(ThreadPoolTest, CallableConcurrencySafety)
+TEST_F(ThreadPoolTest, SimpleTaskExecution)
 {
-    SetupCallablePool256(2 /* reserved */, 2 /* min */, 4 /* max */);
-    pool_callable_256_->start();
+    // create(2 threads, capacity=1024, 3 priorities)
+    auto &pool = ThreadPool::create(2, 1024, 3);
+    pool.start();
 
-    std::vector<std::thread> producers;
-    const int items_per_thread = 50;
-    for (int t = 0; t < 3; ++t)
+    std::atomic<int> counter{0};
+    std::vector<std::future<int>> futures;
+
+    // Submit 10 tasks (priority=MEDIUM => index=1)
+    for (int i = 0; i < 10; i++)
     {
-        producers.emplace_back([this, items_per_thread]()
+        auto fut = pool.submit(to_index(DefaultTaskPriority::MEDIUM), [&counter, i]() -> int
                                {
-            for (int i = 0; i < items_per_thread; ++i) {
-                buffer_callable_256_->push([this]() { counter_.fetch_add(1, std::memory_order_relaxed); });
+            counter.fetch_add(1);
+            return i; });
+        futures.push_back(std::move(fut));
+    }
+
+    for (auto &f : futures)
+    {
+        f.wait();
+    }
+    pool.stop();
+
+    EXPECT_EQ(counter.load(), 10);
+
+    // Reset the singleton if you want to allow a fresh instance in other tests
+    ThreadPool::destroy();
+}
+
+TEST_F(ThreadPoolTest, TaskWithResult)
+{
+    // create(2 threads, capacity=1024, 3 priorities)
+    auto &pool = ThreadPool::create(2, 1024, 3);
+    pool.start();
+
+    auto result_future = pool.submit(to_index(DefaultTaskPriority::HIGH), []
+                                     { return 42; });
+    EXPECT_EQ(result_future.get(), 42);
+
+    pool.stop();
+    ThreadPool::destroy();
+}
+
+TEST_F(ThreadPoolTest, MultipleTasksWithResults)
+{
+    auto &pool = ThreadPool::create(4, 1024, 3);
+    pool.start();
+
+    std::vector<std::future<int>> futures;
+    const int NUM_TASKS = 100;
+
+    for (int i = 0; i < NUM_TASKS; i++)
+    {
+        auto fut = pool.submit(to_index(DefaultTaskPriority::MEDIUM), [i]()
+                               { return i * i; });
+        futures.push_back(std::move(fut));
+    }
+
+    for (int i = 0; i < NUM_TASKS; i++)
+    {
+        EXPECT_EQ(futures[i].get(), i * i);
+    }
+
+    pool.stop();
+    ThreadPool::destroy();
+}
+
+//-----------------------------------------------------------
+// 2) Priority testing
+//-----------------------------------------------------------
+TEST_F(ThreadPoolTest, PriorityOrder)
+{
+    // One thread => it checks ring buffers in ascending index => 0 first, 1 next, 2 last
+    auto &pool = ThreadPool::create(1, 1024, 3);
+    pool.start();
+
+    std::atomic<int> executionCounter{0};
+    std::array<int, 6> executionOrder{0};
+    std::vector<std::future<int>> futures;
+
+    // We'll submit tasks at indexes: 2(Low), 1(Med), 0(High) to see if index=0 tasks run first
+    //  Low=2
+    for (int i = 0; i < 2; i++)
+    {
+        auto fut = pool.submit(to_index(DefaultTaskPriority::LOW), [&executionCounter, &executionOrder]() -> int
+                               {
+            std::this_thread::sleep_for(10ms);
+            int pos = executionCounter.fetch_add(1);
+            executionOrder[pos] = 2; 
+            return 0; });
+        futures.push_back(std::move(fut));
+    }
+    //  Medium=1
+    for (int i = 0; i < 2; i++)
+    {
+        auto fut = pool.submit(to_index(DefaultTaskPriority::MEDIUM), [&executionCounter, &executionOrder]() -> int
+                               {
+            std::this_thread::sleep_for(10ms);
+            int pos = executionCounter.fetch_add(1);
+            executionOrder[pos] = 1;
+            return 0; });
+        futures.push_back(std::move(fut));
+    }
+    //  High=0
+    for (int i = 0; i < 2; i++)
+    {
+        auto fut = pool.submit(to_index(DefaultTaskPriority::HIGH), [&executionCounter, &executionOrder]() -> int
+                               {
+            std::this_thread::sleep_for(10ms);
+            int pos = executionCounter.fetch_add(1);
+            executionOrder[pos] = 0;
+            return 0; });
+        futures.push_back(std::move(fut));
+    }
+
+    for (auto &f : futures)
+        f.wait();
+
+    pool.stop();
+    ThreadPool::destroy();
+
+    // We expect: tasks at index=0 (HIGH) run first, then index=1 (MEDIUM), then 2 (LOW)
+    EXPECT_EQ(executionCounter.load(), 6);
+    EXPECT_EQ(executionOrder[0], 0);
+    EXPECT_EQ(executionOrder[1], 0);
+    EXPECT_EQ(executionOrder[2], 1);
+    EXPECT_EQ(executionOrder[3], 1);
+    EXPECT_EQ(executionOrder[4], 2);
+    EXPECT_EQ(executionOrder[5], 2);
+}
+
+//-----------------------------------------------------------
+// 3) Statistics tests
+//-----------------------------------------------------------
+TEST_F(ThreadPoolTest, StatisticsTracking)
+{
+    {
+        auto &pool = ThreadPool::create(2, 1024, 3);
+        pool.start();
+
+        // Submit a mix of tasks
+        for (int i = 0; i < 10; i++)
+        {
+            pool.submit(to_index(DefaultTaskPriority::HIGH), []
+                        { std::this_thread::sleep_for(5ms); });
+        }
+        for (int i = 0; i < 5; i++)
+        {
+            pool.submit(to_index(DefaultTaskPriority::MEDIUM), []
+                        { std::this_thread::sleep_for(5ms); });
+        }
+
+        std::this_thread::sleep_for(3s);
+        pool.stop(ShutdownMode::Graceful);
+
+        auto stats = pool.get_stats();
+        EXPECT_EQ(stats.tasks_submitted, 15ul);
+        EXPECT_EQ(stats.tasks_completed, 15ul);
+        EXPECT_EQ(stats.tasks_by_priority[to_index(DefaultTaskPriority::HIGH)], 10ul);
+        EXPECT_EQ(stats.tasks_by_priority[to_index(DefaultTaskPriority::MEDIUM)], 5ul);
+        EXPECT_EQ(stats.tasks_by_priority[to_index(DefaultTaskPriority::LOW)], 0ul);
+
+        ThreadPool::destroy();
+    }
+
+    {
+        auto &pool2 = ThreadPool::create(2, 1024, 3);
+        pool2.start();
+
+        pool2.reset_stats();
+        auto stats2 = pool2.get_stats();
+        EXPECT_EQ(stats2.tasks_submitted, 0ul);
+        EXPECT_EQ(stats2.tasks_completed, 0ul);
+
+        // Submit a single task
+        pool2.submit(to_index(DefaultTaskPriority::LOW), []() {});
+        pool2.stop(ShutdownMode::Graceful);
+
+        stats2 = pool2.get_stats();
+        EXPECT_EQ(stats2.tasks_submitted, 1ul);
+        EXPECT_EQ(stats2.tasks_completed, 1ul);
+        EXPECT_EQ(stats2.tasks_by_priority[to_index(DefaultTaskPriority::LOW)], 1ul);
+
+        ThreadPool::destroy();
+    }
+}
+
+//-----------------------------------------------------------
+// 4) Performance tests
+//-----------------------------------------------------------
+TEST_F(ThreadPoolTest, ConcurrentSubmissions)
+{
+    auto &pool = ThreadPool::create(4, 1024, 3);
+    pool.start();
+
+    std::atomic<int> counter{0};
+    const int THREADS = 4;
+    const int TASKS_PER_THREAD = 100;
+
+    std::vector<std::thread> submitters;
+    submitters.reserve(THREADS);
+
+    for (int t = 0; t < THREADS; t++)
+    {
+        submitters.emplace_back([&pool, &counter]()
+                                {
+            for (int i = 0; i < TASKS_PER_THREAD; i++)
+            {
+                // cycle priority among 0..2
+                std::size_t prio_index = (i % 3);
+                try
+                {
+                    pool.submit(prio_index, [&counter] {
+                        counter.fetch_add(1);
+                        std::this_thread::sleep_for(1ms);
+                    });
+                }
+                catch (const BufferFull&)
+                {
+                    // If ring buffer is full, back off
+                    std::this_thread::sleep_for(5ms);
+                }
             } });
     }
 
-    for (auto &t : producers)
+    for (auto &th : submitters)
+        th.join();
+
+    // Wait up to 5s for tasks
+    auto start = std::chrono::steady_clock::now();
+    const int totalTasks = THREADS * TASKS_PER_THREAD;
+    while (counter < totalTasks)
     {
-        t.join();
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    pool_callable_256_->stop();
-
-    EXPECT_EQ(counter_.load(), 3 * items_per_thread);
-}
-
-// Test cases using task pool
-TEST_F(ThreadPoolTest, TaskWorkerProcessing)
-{
-    SetupTaskPool();
-    pool_16_->start();
-
-    for (int i = 1; i <= 10; ++i)
-    {
-        buffer_int_16_->push(i);
+        std::this_thread::sleep_for(100ms);
+        auto elapsed = std::chrono::steady_clock::now() - start;
+        if (elapsed > 5s)
+            break;
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    pool_16_->stop();
+    pool.stop();
+    ThreadPool::destroy();
 
-    EXPECT_EQ(counter_.load(), 55); // Sum of 1 to 10
-    EXPECT_TRUE(buffer_int_16_->empty());
+    // Might not get all tasks if ring buffers got full
+    EXPECT_GE(counter.load(), totalTasks * 0.9);
 }
 
-TEST_F(ThreadPoolTest, TaskScalingUp)
+TEST_F(ThreadPoolTest, LongRunningTasks)
 {
-    SetupTaskPool256(1 /* reserved */, 1 /* min */, 10 /* max */, 10 /* monitor interval */);
-    pool_256_->start();
+    auto &pool = ThreadPool::create(4, 1024, 3);
+    pool.start();
 
-    // Push 500 tasks
-    for (int i = 0; i < 500; ++i)
+    const int NUM_TASKS = 8;
+    std::vector<std::future<int>> futures;
+    futures.reserve(NUM_TASKS);
+
+    // Submit 8 tasks that each sleep ~100ms
+    for (int i = 0; i < NUM_TASKS; i++)
     {
-        while (!buffer_int_256_->push(1))
+        auto fut = pool.submit(to_index(DefaultTaskPriority::MEDIUM), [i]()
+                               {
+            std::this_thread::sleep_for(100ms);
+            return i; });
+        futures.push_back(std::move(fut));
+    }
+
+    for (int i = 0; i < NUM_TASKS; i++)
+    {
+        EXPECT_EQ(futures[i].get(), i);
+    }
+
+    auto stats = pool.get_stats();
+    // average ~100ms => 100000 microseconds
+    EXPECT_GE(stats.avg_execution_time_us, 100000ul);
+
+    pool.stop();
+    ThreadPool::destroy();
+}
+
+//-----------------------------------------------------------
+// 5) Exception handling tests
+//-----------------------------------------------------------
+TEST_F(ThreadPoolTest, TaskExceptions)
+{
+    {
+        auto &pool = ThreadPool::create(2, 1024, 3);
+        pool.start();
+
+        for (int i = 0; i < 5; i++)
         {
-            std::this_thread::yield();
+            pool.submit(to_index(DefaultTaskPriority::MEDIUM), []
+                        { throw std::runtime_error("Void task exception"); });
+        }
+
+        pool.stop(ShutdownMode::Graceful);
+
+        auto stats = pool.get_stats();
+        EXPECT_EQ(stats.exception_count, 5ul);
+
+        ThreadPool::destroy();
+    }
+
+    {
+        auto &pool = ThreadPool::create(2, 1024, 3);
+        std::atomic<int> exceptionCounter{0};
+
+        pool.set_exception_handler([&exceptionCounter](std::exception_ptr)
+                                   { exceptionCounter.fetch_add(1, std::memory_order_relaxed); });
+        pool.start();
+
+        for (int i = 0; i < 5; i++)
+        {
+            pool.submit(to_index(DefaultTaskPriority::MEDIUM), []
+                        { throw std::runtime_error("Void task exception"); });
+        }
+
+        pool.stop(ShutdownMode::Graceful);
+
+        // Our custom handler got them all
+        EXPECT_EQ(exceptionCounter.load(std::memory_order_relaxed), 5);
+
+        // Built-in stats for exceptions remain 0, since we used a custom handler
+        auto stats = pool.get_stats();
+        EXPECT_EQ(stats.exception_count, 0ul);
+
+        ThreadPool::destroy();
+    }
+}
+
+TEST_F(ThreadPoolTest, CustomExceptionHandler)
+{
+    auto &pool = ThreadPool::create(2, 1024, 3);
+
+    std::atomic<int> exceptionCount{0};
+    pool.set_exception_handler([&exceptionCount](std::exception_ptr)
+                               { exceptionCount++; });
+    pool.start();
+
+    // Submit tasks that throw
+    for (int i = 0; i < 5; i++)
+    {
+        pool.submit(to_index(DefaultTaskPriority::MEDIUM), []
+                    { throw std::runtime_error("Test exception"); });
+    }
+
+    pool.stop(ShutdownMode::Graceful);
+
+    // Verify custom handler caught all exceptions
+    EXPECT_EQ(exceptionCount.load(), 5);
+
+    // Built-in stats for exceptions remain 0, since we used a custom handler
+    auto stats = pool.get_stats();
+    EXPECT_EQ(stats.exception_count, 0ul);
+
+    ThreadPool::destroy();
+}
+
+//-----------------------------------------------------------
+// 6) Shutdown tests
+//-----------------------------------------------------------
+TEST_F(ThreadPoolTest, ImmediateShutdown)
+{
+    auto &pool = ThreadPool::create(2, 1024, 3);
+    pool.start();
+
+    std::atomic<int> counter{0};
+
+    for (int i = 0; i < 10; i++)
+    {
+        pool.submit(to_index(DefaultTaskPriority::MEDIUM), [&counter, i]
+                    {
+            std::this_thread::sleep_for(500ms);
+            counter++; });
+    }
+
+    std::this_thread::sleep_for(100ms);
+    pool.stop(ShutdownMode::Immediate); // Clears tasks
+
+    // Some tasks may have finished, but not all 10
+    EXPECT_LT(counter.load(), 10);
+
+    ThreadPool::destroy();
+}
+
+TEST_F(ThreadPoolTest, DrainShutdown)
+{
+    auto &pool = ThreadPool::create(4, 1024, 3);
+    pool.start();
+
+    std::atomic<int> counter{0};
+
+    // Submit a few quick tasks
+    for (int i = 0; i < 5; i++)
+    {
+        pool.submit(to_index(DefaultTaskPriority::HIGH), [&counter]()
+                    { counter.fetch_add(1); });
+    }
+
+    std::this_thread::sleep_for(50ms);
+    // "Graceful" => let tasks finish
+    pool.stop(ShutdownMode::Graceful);
+
+    // All tasks should have completed
+    EXPECT_EQ(counter.load(), 5);
+
+    ThreadPool::destroy();
+}
+
+TEST_F(ThreadPoolTest, FullRingBuffer)
+{
+    // Very small ring buffer (capacity=8)
+    // with 3 priorities
+    auto &pool = ThreadPool::create(1, 8, 3);
+    pool.start();
+
+    std::atomic<int> counter{0};
+    std::atomic<int> rejections{0};
+    std::vector<std::future<void>> futures;
+
+    // Submit 20 tasks, likely to exceed capacity
+    for (int i = 0; i < 20; i++)
+    {
+        auto fut = pool.submit(to_index(DefaultTaskPriority::MEDIUM), [&counter]
+                               {
+            std::this_thread::sleep_for(10ms);
+            counter++; });
+        futures.push_back(std::move(fut));
+    }
+
+    std::this_thread::sleep_for(100ms);
+
+    // Check for BufferFull exceptions
+    for (auto &f : futures)
+    {
+        try
+        {
+            f.get();
+        }
+        catch (const BufferFull &)
+        {
+            rejections++;
+        }
+        catch (...)
+        {
+            // ignore
         }
     }
 
-    // Wait until at least 100 tasks are processed or timeout after 1 second
-    auto start = std::chrono::steady_clock::now();
-    while (counter_.load() < 100 &&
-           std::chrono::steady_clock::now() - start < std::chrono::seconds(1))
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
+    pool.stop(ShutdownMode::Graceful);
 
-    // Check scaling (relaxed to >= 2, but ideally >= 4 if monitor logic is correct)
-    EXPECT_GE(pool_256_->get_active_threads(), 3)
-        << "Active threads: " << pool_256_->get_active_threads()
-        << ", Counter: " << counter_.load();
+    // Some tasks were likely rejected
+    EXPECT_GT(rejections.load(), 0);
+    EXPECT_EQ(counter.load() + rejections.load(), 20);
 
-    pool_256_->stop();
-    EXPECT_GT(counter_.load(), 4); // Ensure some work was done
+    auto stats = pool.get_stats();
+    EXPECT_EQ(stats.submission_failures, size_t(rejections.load()));
+
+    ThreadPool::destroy();
 }
 
-TEST_F(ThreadPoolTest, TaskScalingDown)
-{
-    // Configure thread pool with a faster monitor interval
-    SetupTaskPool(3 /* reserved */, 1 /* min */, 3 /* max */, 10 /* monitor interval in ms */);
-    pool_16_->start();
-
-    // Push 10 tasks into the buffer
-    for (int i = 0; i < 10; ++i)
-    {
-        buffer_int_16_->push(1);
-    }
-
-    // Wait until all tasks are processed
-    auto start = std::chrono::steady_clock::now();
-    while (counter_.load() < 10 && 
-           std::chrono::steady_clock::now() - start < std::chrono::seconds(1))
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-
-    // Wait longer for scaling down to occur
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
-    // Check the number of active threads
-    std::size_t active_before_stop = pool_16_->get_active_threads();
-    pool_16_->stop();
-
-    // Assert expectations
-    EXPECT_LE(active_before_stop, 3) 
-        << "Active threads: " << active_before_stop;
-    EXPECT_GE(active_before_stop, 1); // Respect the minimum threads
-    EXPECT_EQ(counter_.load(), 10);   // Ensure all tasks were processed
-}
-
-TEST_F(ThreadPoolTest, TaskShutdownDuringOperation)
-{
-    SetupTaskPool();
-    pool_16_->start();
-
-    for (int i = 0; i < 100; ++i)
-    {
-        buffer_int_16_->push(1);
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    pool_16_->stop();
-
-    EXPECT_LE(counter_.load(), 100);
-    EXPECT_GE(counter_.load(), 0);
-}
-
-TEST_F(ThreadPoolTest, TaskFullBuffer)
-{
-    SetupTaskPool();
-    pool_16_->start();
-
-    for (int i = 0; i < 16; ++i)
-    {
-        EXPECT_TRUE(buffer_int_16_->push(1));
-    }
-    EXPECT_FALSE(buffer_int_16_->push(1));
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    pool_16_->stop();
-
-    EXPECT_EQ(counter_.load(), 16);
-}
-
-TEST_F(ThreadPoolTest, TaskExceptionHandling)
-{
-    // This test verifies that if tasks throw exceptions, the pool continues to operate
-    // and processes subsequent tasks without crashing or silently terminating threads.
-
-    // Create a pool where each task may or may not throw an exception.
-    buffer_callable_16_ = std::make_unique<RingBuffer<std::function<void()>, 16>>();
-    pool_callable_16_ = std::make_unique<ThreadPool<
-        RingBuffer<std::function<void()>, 16>,
-        std::function<void()>>>(
-            *buffer_callable_16_,
-            2, /* reserved threads */
-            1, /* min threads */
-            1.5, 0.5, /* spawn/shrink thresholds */
-            4 /* max threads */, 
-            50 /* monitor interval ms */
-    );
-
-    pool_callable_16_->start();
-
-    // Push tasks that sometimes throw
-    const int num_tasks = 10;
-    std::atomic<int> success_count{0};
-    for (int i = 0; i < num_tasks; ++i) {
-        buffer_callable_16_->push([&success_count, i]() {
-            if (i % 2 == 0) {
-                // Throw on even iterations
-                throw std::runtime_error("Intentional error");
-            } else {
-                success_count.fetch_add(1, std::memory_order_relaxed);
-            }
-        });
-    }
-
-    // Wait a little for tasks to run
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    pool_callable_16_->stop();
-
-    // Only half the tasks should succeed (the ones that don't throw),
-    // but the pool should not crash or lose threads.
-    EXPECT_EQ(success_count.load(), num_tasks / 2);
-    EXPECT_EQ(pool_callable_16_->get_total_threads(), 0)
-        << "The pool should have shut down cleanly.";
-}
-
-TEST_F(ThreadPoolTest, LargeLoadStressTest)
-{
-    SetupTaskPool256(2, 1, 8, 20);
-    pool_256_->start();
-
-    const int total_tasks = 2000;
-    for (int i = 0; i < total_tasks; ++i) {
-        while (!buffer_int_256_->push(1)) {
-            std::this_thread::yield();
-        }
-    }
-
-    auto start = std::chrono::steady_clock::now();
-    while (counter_.load() < total_tasks &&
-           std::chrono::steady_clock::now() - start < std::chrono::seconds(15)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-
-    pool_256_->stop();
-
-    // Instead of strict equality, ensure at least 90% processed
-    EXPECT_GE(counter_.load(), total_tasks * 9 / 10)
-        << "At least 90% of tasks should be done. Possibly too slow or starved in this environment.";
-}
-
-
-TEST_F(ThreadPoolTest, ThroughputRatioEdges)
-{
-    // This test tries to push tasks in bursts, then stop pushing for a while,
-    // to check if the pool's throughput_ratio-based scaling logic triggers up/down adjustments.
-
-    // We'll use a smaller ring buffer to exaggerate queue pressure.
-    SetupTaskPool(2 /* reserved */, 1 /* min */, 5 /* max */, 10 /* monitor interval */);
-    pool_16_->start();
-
-    // Burst of tasks
-    const int burst_size = 30;
-    for (int i = 0; i < burst_size; ++i) {
-        while (!buffer_int_16_->push(1)) {
-            std::this_thread::yield();
-        }
-    }
-
-    // Wait a bit to let the queue fill and see if ratio triggers spawn
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    std::size_t active_mid_burst = pool_16_->get_active_threads();
-
-    // Wait until that burst drains (the tasks sum is quick, but we allow some overhead)
-    auto start = std::chrono::steady_clock::now();
-    while (counter_.load() < burst_size &&
-           std::chrono::steady_clock::now() - start < std::chrono::seconds(2)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-
-    // Let the pool become idle for a moment (should trigger ratio < shrink_threshold).
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    std::size_t active_after_idle = pool_16_->get_active_threads();
-
-    // Stop and finalize
-    pool_16_->stop();
-    EXPECT_EQ(counter_.load(), burst_size);
-
-    // Usually, we'd expect that 'active_mid_burst' ≥ 2 or 3
-    // and 'active_after_idle' might return closer to min_threads_ (==1).
-    // Because this depends heavily on actual 'throughput_ratio()' in the buffer
-    // and the hysteresis timers, keep the checks relaxed:
-    EXPECT_GE(active_mid_burst, 2U) 
-        << "Threads did not scale up as expected during the burst.";
-    EXPECT_LE(active_after_idle, active_mid_burst) 
-        << "Threads did not scale down after the burst.";
-}
-
-
-//------------------------------------------------------------------------------
-// main: typical Google Test entry
-//------------------------------------------------------------------------------
+//
+// main test runner
+//
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);

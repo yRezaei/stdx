@@ -1,243 +1,157 @@
 #include <gtest/gtest.h>
+#include <chrono>
 #include <thread>
 #include <fstream>
 #include <filesystem>
-#include <chrono>
-#include <stdx/logger/log_manager.hpp> // <-- Includes LogManager & Logger
-#include <stdx/logger/logger.hpp>
+#include <vector>
+#include <atomic>
+#include "stdx/threading/thread_pool.hpp"
+#include "stdx/logging/logger.hpp"
 
-using namespace stdx;
+using namespace std::chrono_literals;
 
-// Helper function to validate log file content
-void validateLogFile(const std::string &file_path, const std::string &expected_content)
-{
-    std::ifstream file(file_path);
-    ASSERT_TRUE(file.is_open()) << "Unable to open log file: " << file_path;
-
-    std::string line;
-    bool found = false;
-    while (std::getline(file, line))
-    {
-        if (line.find(expected_content) != std::string::npos)
-        {
-            found = true;
-            break;
-        }
-    }
-
-    ASSERT_TRUE(found) << "Expected content not found in log file: " << expected_content;
-}
-
-// Test fixture for Logger tests
-class LoggerTests : public ::testing::Test
-{
+// Test fixture to set up and tear down the logging environment
+class LoggerTest : public ::testing::Test {
 protected:
-    std::string log_file_name_;
+    std::string log_path = "./test_logs";
+    std::string log_file_name = "test.log";
+    std::size_t batch_number = 2; // Small batch size for testing
+    std::chrono::milliseconds write_threshold = 100ms;
+    stdx::threading::ThreadPool& pool{stdx::threading::ThreadPool::create(2, 1024, 1)}; // Thread pool with 2 threads
 
-    void SetUp() override
-    {
-        // Generate a log file name based on the current test case name
-        const ::testing::TestInfo *test_info = ::testing::UnitTest::GetInstance()->current_test_info();
-        log_file_name_ = "logs/" + std::string(test_info->name()) + ".log";
-
-        // Initialize the LogManager with the generated log file name
-        // (here we use 100 * 1024 ≈ 100KB as the max file size, 3 backups)
-        LogManager::initialize(log_file_name_, 10 * 1024, 3);
+    void SetUp() override {
+        // Create a temporary directory for logs
+        std::filesystem::create_directory(log_path);
+        pool.start();
     }
 
-    void TearDown() override
-    {
-        // Shut down the logging system
-        // (Make sure you have implemented LogManager::shutdown())
-        LogManager::shutdown();
+    void TearDown() override {
+        pool.stop();
+        stdx::logging::Logger::shutdown();
+        // Clean up the temporary directory
+        // std::filesystem::remove_all(log_path);
+    }
 
-        // Clean up all logs after the test
-        try
-        {
-            std::filesystem::remove_all("logs");
-        }
-        catch (const std::exception &ex)
-        {
-            std::cerr << "Log cleanup failed: " << ex.what() << "\n";
-        }
+    // Helper function to read the log file contents
+    std::string read_log_file() {
+        std::ifstream log_file(log_path + "/" + log_file_name);
+        std::stringstream buffer;
+        buffer << log_file.rdbuf();
+        return buffer.str();
     }
 };
 
-// Test logging basic messages
-TEST_F(LoggerTests, LogBasicMessages)
-{
-    // Create a Logger for "BasicTest"
-    auto logger = LogManager::create_logger("BasicTest");
+// Test 1: Verify initialization works and is idempotent
+TEST_F(LoggerTest, Initialization) {
+    stdx::logging::Logger::initialize(pool, log_path, log_file_name, batch_number, write_threshold);
+    // Second call should have no effect (idempotency)
+    stdx::logging::Logger::initialize(pool, "different_path", "different_file.log", 10, 500ms);
 
-    // Log messages
-    logger.log(SEVERITY::INFO, "Logging INFO message.");
-    logger.log(SEVERITY::ERR, "Logging ERROR message.");
+    stdx::logging::Logger logger("TestComponent");
+    LOG_INFO(logger, "Initialization test");
 
-    // Flush logs to ensure all messages are written
-    logger.flush();
+    // Wait for asynchronous log write
+    std::this_thread::sleep_for(200ms);
+    stdx::logging::Logger::shutdown();
 
-    // Validate log file content
-    validateLogFile(log_file_name_, "Logging INFO message");
-    validateLogFile(log_file_name_, "Logging ERROR message");
+    std::string log_content = read_log_file();
+    EXPECT_TRUE(log_content.find("[TestComponent] [INFO] Initialization test") != std::string::npos);
 }
 
-// Test logging under high load
-TEST_F(LoggerTests, HighLoadLogging)
-{
-    // Create a Logger for "HighLoadTest"
-    auto logger = LogManager::create_logger("HighLoadTest");
+// Test 2: Verify log submission and batching
+TEST_F(LoggerTest, LogSubmissionAndBatching) {
+    stdx::logging::Logger::initialize(pool, log_path, log_file_name, batch_number, write_threshold);
+    stdx::logging::Logger logger("BatchTest");
 
-    // Log a large number of messages
-    for (int i = 0; i < 1000; ++i)
-    {
-        logger.log(SEVERITY::DEB, "Logging message #" + std::to_string(i));
-    }
+    // Submit logs to reach batch size
+    LOG_INFO(logger, "Log 1");
+    LOG_INFO(logger, "Log 2"); // Should trigger a write since batch_number = 2
 
-    // Flush logs to ensure all messages are written
-    logger.flush();
-
-    // Check for log messages in the active log file first
-    bool found_message_0 = false;
-    bool found_message_999 = false;
-
-    std::filesystem::path active_log_file = log_file_name_; // e.g. "logs/HighLoadLogging.log"
-    if (std::filesystem::exists(active_log_file))
-    {
-        std::ifstream file(active_log_file);
-        ASSERT_TRUE(file.is_open()) << "Unable to open active log file: " << active_log_file;
-
-        std::string line;
-        while (std::getline(file, line))
-        {
-            if (line.find("Logging message #0") != std::string::npos)
-            {
-                found_message_0 = true;
-            }
-            if (line.find("Logging message #999") != std::string::npos)
-            {
-                found_message_999 = true;
-            }
-        }
-    }
-
-    // If not found in the active log file, check the rotated files in the history folder
-    if (!found_message_0 || !found_message_999)
-    {
-        std::filesystem::path history_dir = "logs/history";
-        ASSERT_TRUE(std::filesystem::exists(history_dir)) << "History folder does not exist";
-        ASSERT_TRUE(std::filesystem::is_directory(history_dir)) << "History folder is not a directory";
-
-        for (const auto &entry : std::filesystem::directory_iterator(history_dir))
-        {
-            if (entry.is_regular_file())
-            {
-                std::ifstream file(entry.path());
-                ASSERT_TRUE(file.is_open()) << "Unable to open rotated log file: " << entry.path();
-
-                std::string line;
-                while (std::getline(file, line))
-                {
-                    if (line.find("Logging message #0") != std::string::npos)
-                    {
-                        found_message_0 = true;
-                    }
-                    if (line.find("Logging message #999") != std::string::npos)
-                    {
-                        found_message_999 = true;
-                    }
-                }
-            }
-        }
-    }
-
-    ASSERT_TRUE(found_message_0) << "Logging message #0 not found in any log file (active or rotated)";
-    ASSERT_TRUE(found_message_999) << "Logging message #999 not found in any log file (active or rotated)";
+    std::this_thread::sleep_for(200ms);
+    stdx::logging::Logger::shutdown();
+    std::string log_content = read_log_file();
+    EXPECT_TRUE(log_content.find("Log 1") != std::string::npos);
+    EXPECT_TRUE(log_content.find("Log 2") != std::string::npos);
 }
 
-// Test log file rotation
-TEST_F(LoggerTests, LogFileRotation)
-{
-    auto logger = LogManager::create_logger("RotationTest");
+// Test 3: Verify periodic flushing
+TEST_F(LoggerTest, PeriodicFlushing) {
+    stdx::logging::Logger::initialize(pool, log_path, log_file_name, batch_number, write_threshold);
+    stdx::logging::Logger logger("FlushTest");
 
-    // Log enough messages to trigger file rotation
-    for (int i = 0; i < 3000; ++i)
-    {
-        logger.log(SEVERITY::INFO, "Message #" + std::to_string(i));
-    }
+    // Submit a single log (less than batch size)
+    LOG_INFO(logger, "Single log");
 
-    // Wait briefly for the worker thread to process messages
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
-    // Flush logs to ensure rotation is complete
-    logger.flush();
-
-    // Check if any file exists in the history folder
-    std::filesystem::path history_dir = "logs/history";
-    bool history_exists = std::filesystem::exists(history_dir) && std::filesystem::is_directory(history_dir);
-
-    ASSERT_TRUE(history_exists) << "History folder does not exist";
-
-    bool file_found = false;
-    for (const auto &entry : std::filesystem::directory_iterator(history_dir))
-    {
-        if (entry.is_regular_file())
-        {
-            file_found = true;
-            break;
-        }
-    }
-
-    ASSERT_TRUE(file_found) << "No rotated log file found in history folder";
+    // Wait longer than the flush interval
+    std::this_thread::sleep_for(150ms); // write_threshold is 100ms
+    stdx::logging::Logger::shutdown();
+    std::string log_content = read_log_file();
+    EXPECT_TRUE(log_content.find("Single log") != std::string::npos);
 }
 
-// Test buffered writing with time threshold
-TEST_F(LoggerTests, BufferedWritingTimeThreshold)
-{
-    auto logger = LogManager::create_logger("BufferTest");
+// Test 4: Verify log formatting
+TEST_F(LoggerTest, LogFormatting) {
+    stdx::logging::Logger::initialize(pool, log_path, log_file_name, batch_number, write_threshold);
+    stdx::logging::Logger logger("FormatTest");
 
-    // Log fewer than the flush threshold
-    for (int i = 0; i < 5; ++i)
-    {
-        logger.log(SEVERITY::DEB, "Buffered message #" + std::to_string(i));
+    LOG_INFO(logger, "Formatted log");
+
+    std::this_thread::sleep_for(200ms);
+    stdx::logging::Logger::shutdown();
+    std::string log_content = read_log_file();
+    // Check for expected format: timestamp with microseconds, component, severity, message
+    EXPECT_TRUE(log_content.find("[FormatTest] [INFO] Formatted log") != std::string::npos);
+    EXPECT_TRUE(log_content.find(".") != std::string::npos); // Microseconds in timestamp
+}
+
+// Test 5: Verify thread safety
+TEST_F(LoggerTest, ThreadSafety) {
+    stdx::logging::Logger::initialize(pool, log_path, log_file_name, batch_number, write_threshold);
+    stdx::logging::Logger logger("ThreadTest");
+
+    std::atomic<int> counter{0};
+    std::vector<std::thread> threads;
+
+    // Launch 5 threads to submit logs
+    for (int i = 0; i < 5; ++i) {
+        threads.emplace_back([&logger, &counter] {
+            LOG_INFO(logger, "Log from thread " + std::to_string(counter.fetch_add(1)));
+        });
     }
 
-    // Wait for the time threshold to elapse (assuming 500ms or so in your impl)
-    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+    // Wait for all threads to finish
+    for (auto& th : threads) {
+        th.join();
+    }
 
-    // Flush logs to ensure all buffered messages are written
-    logger.flush();
-
-    // Validate that the messages were written despite not meeting the count threshold
-    for (int i = 0; i < 5; ++i)
-    {
-        validateLogFile(log_file_name_, "Buffered message #" + std::to_string(i));
+    std::this_thread::sleep_for(200ms);
+    stdx::logging::Logger::shutdown();
+    std::string log_content = read_log_file();
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_TRUE(log_content.find("Log from thread " + std::to_string(i)) != std::string::npos);
     }
 }
 
-// Test buffered writing with message threshold
-TEST_F(LoggerTests, BufferedWritingMessageThreshold)
-{
-    auto logger = LogManager::create_logger("BufferTest");
+// Test 6: HighLoad of log
+TEST_F(LoggerTest, HighLoad) {
+    stdx::logging::Logger::initialize(pool, log_path, log_file_name, batch_number, write_threshold);
+    stdx::logging::Logger logger("HighLoadTest");
 
-    // Log exactly the flush threshold number of messages (assuming flush_threshold = 10)
-    for (int i = 0; i < 10; ++i)
-    {
-        logger.log(SEVERITY::DEB, "Buffered message #" + std::to_string(i));
+    // Submit more logs than the ring buffer can hold (assuming capacity ~1024)
+    for (int i = 0; i < 2000; ++i) {
+        LOG_INFO(logger, "Log " + std::to_string(i));
     }
 
-    // Wait briefly for the worker thread to process
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    // Validate that all messages were written
-    for (int i = 0; i < 10; ++i)
-    {
-        validateLogFile(log_file_name_, "Buffered message #" + std::to_string(i));
-    }
+    std::this_thread::sleep_for(200ms);
+    stdx::logging::Logger::shutdown();
+    std::string log_content = read_log_file();
+    // Check that some logs are written, but later ones may be dropped
+    EXPECT_TRUE(log_content.find("Log 0") != std::string::npos);
+    EXPECT_TRUE(log_content.find("Log 1999") != std::string::npos);
 }
 
-// Main entry point for Google Test
-int main(int argc, char **argv)
-{
+// Main function to run the tests
+int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }

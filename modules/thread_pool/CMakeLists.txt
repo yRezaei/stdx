@@ -1,6 +1,22 @@
+set(_sources
+    "${CMAKE_SOURCE_DIR}/src/thread_pool.cxx"
+)
+
+list(APPEND STDX_SOURCES ${_sources})
+set(STDX_SOURCES "${STDX_SOURCES}" PARENT_SCOPE)
+
 
 list(APPEND STDX_HEADERS
     "${CMAKE_SOURCE_DIR}/include/stdx/threading/thread_pool.hpp"
+    "${CMAKE_SOURCE_DIR}/include/stdx/inline_function.hpp"
+    "${CMAKE_SOURCE_DIR}/include/stdx/singleton.hpp"
+    "${CMAKE_SOURCE_DIR}/include/stdx/stdx_export.hpp"
+)
+
+install(
+    FILES
+        "${CMAKE_SOURCE_DIR}/include/stdx/inline_function.hpp"
+    DESTINATION "include/stdx"
 )
 
 install(
@@ -8,14 +24,3 @@ install(
         "${CMAKE_SOURCE_DIR}/include/stdx/threading/thread_pool.hpp"
     DESTINATION "include/stdx/threading"
 )
-
-# option(STDX_BUILD_TESTS "Enable building tests for the flag module" OFF)
-# if(STDX_BUILD_TESTS)
-#     find_package(GTest REQUIRED)
-#     # Add the test executable
-#     add_executable(test_flag ${CMAKE_SOURCE_DIR}/test_package/test_flag.cxx)
-#     target_link_libraries(test_flag PRIVATE flag gtest::gtest)
-    
-#     # Add the test to CTest
-#     add_test(NAME test_flag COMMAND test_flag)
-# endif()

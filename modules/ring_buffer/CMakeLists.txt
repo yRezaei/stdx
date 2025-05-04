@@ -1,6 +1,13 @@
 
 list(APPEND STDX_HEADERS
     "${CMAKE_SOURCE_DIR}/include/stdx/concurrency/ring_buffer.hpp"
+    "${CMAKE_SOURCE_DIR}/include/stdx/inline_function.hpp"
+)
+
+install(
+    FILES
+        "${CMAKE_SOURCE_DIR}/include/stdx/inline_function.hpp"
+    DESTINATION "include/stdx"
 )
 
 install(
